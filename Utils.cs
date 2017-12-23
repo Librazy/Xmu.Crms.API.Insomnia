@@ -12,8 +12,6 @@ namespace Xmu.Crms.Insomnia
 {
     public static class Utils
     {
-        public static JwtHeader JwtHeader { get; set; }
-
         public static long Id(this ClaimsPrincipal user) => long.Parse(user.Claims.Single(c => c.Type == "id").Value);
 
         private static readonly List<JsonConverter> _StringEnumConverter =
