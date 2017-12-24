@@ -1,48 +1,89 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Xmu.Crms.Shared.Exceptions;
 using Xmu.Crms.Shared.Models;
+using Xmu.Crms.Shared.Service;
 
 namespace Xmu.Crms.Insomnia
 {
     [Route("")]
     [Produces("application/json")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class TopicController : Controller
     {
+        private readonly ITopicService _topicService;
+        private readonly ISeminarGroupService _seminarGroupService;
+
+        public TopicController(ITopicService topicService, ISeminarGroupService seminarGroupService)
+        {
+            _topicService = topicService;
+            _seminarGroupService = seminarGroupService;
+        }
+
         [HttpGet("/topic/{topicId:long}")]
         public IActionResult GetTopicById([FromRoute] long topicId)
         {
-            var t = new Topic
+            try
             {
-                Name= "领域模型与模块",
-                Description= "Domain model与模块划分",
-                GroupNumberLimit = 5,
-                GroupStudentLimit = 6
-            };
-            return Json(t);
+                return Json(_topicService.GetTopicByTopicId(topicId));
+            }
+            catch (TopicNotFoundException )
+            {
+                return StatusCode(404, new { msg = "话题不存在" });
+            }
+
         }
 
         [HttpDelete("/topic/{topicId:long}")]
         public IActionResult DeleteTopicById([FromRoute] long topicId)
         {
-            return NoContent();
+            if (User.Type() != Type.Teacher)
+            {
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+
+            try
+            {
+                _topicService.DeleteTopicByTopicId(topicId);
+                return NoContent();
+            }
+            catch (TopicNotFoundException)
+            {
+                return StatusCode(404, new { msg = "话题不存在" });
+            }
         }
 
         [HttpPut("/topic/{topicId:long}")]
         public IActionResult UpdateTopicById([FromRoute] long topicId, [FromBody] Topic updated)
         {
-            return NoContent();
+            if (User.Type() != Type.Teacher)
+            {
+                return StatusCode(403, new { msg = "权限不足" });
+            }
+
+            try
+            {
+                _topicService.UpdateTopicByTopicId(topicId, updated);
+                return NoContent();
+            }
+            catch (TopicNotFoundException)
+            {
+                return StatusCode(404, new { msg = "话题不存在" });
+            }
         }
 
         [HttpGet("/topic/{topicId:long}/group")]
         public IActionResult GetGroupsByTopicId([FromRoute] long topicId)
         {
-            return Json(new List<dynamic>
+            try
             {
-                new {id = 1, name = "1A1"},
-                new {id = 2, name = "1A2"},
-                new {id = 43, name = "2A1"},
-                new {id = 65, name = "2A2"},
-            });
+                return Json(_seminarGroupService.ListGroupByTopicId(topicId));
+            }
+            catch (TopicNotFoundException)
+            {
+                return StatusCode(404, new { msg = "话题不存在" });
+            }
         }
     }
 }

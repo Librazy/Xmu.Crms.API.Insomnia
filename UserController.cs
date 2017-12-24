@@ -1,12 +1,15 @@
 ﻿using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Exceptions;
 using Xmu.Crms.Shared.Models;
 using Xmu.Crms.Shared.Service;
+using static Xmu.Crms.Insomnia.Utils;
 
 namespace Xmu.Crms.Insomnia
 {
@@ -16,43 +19,44 @@ namespace Xmu.Crms.Insomnia
     {
         private readonly JwtHeader _header;
         private readonly ILoginService _loginService;
-        private readonly IUserService _userService;
+        //private readonly IUserService _userService;
 
-        public UserController(JwtHeader header, ILoginService loginService, IUserService userService)
+        public UserController(JwtHeader header, ILoginService loginService/*, IUserService userService*/)
         {
             _header = header;
             _loginService = loginService;
-            _userService = userService;
+            //_userService = userService;
         }
 
-        [Authorize]
-        [HttpGet("/me")]
-        public IActionResult GetCurrentUser()
-        {
-            try
-            {
-                var user = _userService.GetUserByUserId(User.Id());
-                return Json(user, Utils.Ignoring("City", "Province", "Password"));
-            }
-            catch (UserNotFoundException)
-            {
-                return StatusCode(404, new {msg = "用户不存在"});
-            }
-        }
+        //[HttpGet("/me")]
+        //[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        //public IActionResult GetCurrentUser()
+        //{
+        //    try
+        //    {
+        //        var user = _userService.GetUserByUserId(User.Id());
+        //        return Json(user, Ignoring("City", "Province", "Password"));
+        //    }
+        //    catch (UserNotFoundException)
+        //    {
+        //        return StatusCode(404, new {msg = "用户不存在"});
+        //    }
+        //}
 
-        [HttpPut("/me")]
-        public IActionResult UpdateCurrentUser([FromBody] UserInfo updated)
-        {
-            try
-            {
-                _userService.UpdateUserByUserId(User.Id(), updated);
-                return NoContent();
-            }
-            catch (UserNotFoundException)
-            {
-                return StatusCode(404, new {msg = "用户不存在"});
-            }
-        }
+        //[HttpPut("/me")]
+        //[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        //public IActionResult UpdateCurrentUser([FromBody] UserInfo updated)
+        //{
+        //    try
+        //    {
+        //        _userService.UpdateUserByUserId(User.Id(), updated);
+        //        return NoContent();
+        //    }
+        //    catch (UserNotFoundException)
+        //    {
+        //        return StatusCode(404, new {msg = "用户不存在"});
+        //    }
+        //}
 
         [HttpGet("/signin")]
         public IActionResult SigninWechat([FromQuery] string code, [FromQuery] string state,
@@ -64,6 +68,7 @@ namespace Xmu.Crms.Insomnia
             try
             {
                 var user = _loginService.SignInPhone(new UserInfo {Phone = uap.Phone, Password = uap.Password});
+                HttpContext.SignInAsync(JwtBearerDefaults.AuthenticationScheme, new ClaimsPrincipal());
                 return Json(CreateSigninResult(user));
             }
             catch (PasswordErrorException)
@@ -77,6 +82,7 @@ namespace Xmu.Crms.Insomnia
         }
 
         [HttpPost("/register")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public IActionResult RegisterPassword([FromBody] UsernameAndPassword uap)
         {
             try

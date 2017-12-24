@@ -1,37 +1,92 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Xmu.Crms.Shared.Exceptions;
 using Xmu.Crms.Shared.Models;
+using Xmu.Crms.Shared.Service;
+using Type = Xmu.Crms.Shared.Models.Type;
 
 namespace Xmu.Crms.Insomnia
 {
     [Route("")]
     [Produces("application/json")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class SeminarController : Controller
     {
-        [HttpGet("/seminar/{seminarId:long}")]
-        public IActionResult GetSeminarByIdRandom([FromRoute] long seminarId)
+        private readonly ISeminarService _seminarService;
+        private readonly ITopicService _topicService;
+
+        public SeminarController(ISeminarService seminarService, ITopicService topicService)
         {
-            var s1 = new Seminar();
-            var s2 = new Seminar();
-            return Json(seminarId == 1 ? s2 : s1);
+            _seminarService = seminarService;
+            _topicService = topicService;
+        }
+
+        [HttpGet("/seminar/{seminarId:long}")]
+        public IActionResult GetSeminarById([FromRoute] long seminarId)
+        {
+            try
+            {
+                return Json(_seminarService.GetSeminarBySeminarId(seminarId));
+            }
+            catch (SeminarNotFoundException)
+            {
+                return StatusCode(404, new { msg = "讨论课不存在" });
+
+            }
         }
 
         [HttpDelete("/seminar/{seminarId:long}")]
         public IActionResult DeleteSeminarById([FromRoute] long seminarId)
         {
-            return NoContent();
+            if (User.Type() != Type.Teacher)
+            {
+                return StatusCode(403, new { msg = "权限不足" });
+            }
+
+            try
+            {
+                _seminarService.DeleteSeminarBySeminarId(seminarId);
+                return NoContent();
+            }
+            catch (SeminarNotFoundException)
+            {
+                return StatusCode(404, new { msg = "讨论课不存在" });
+            }
         }
 
         [HttpPut("/seminar/{seminarId:long}")]
         public IActionResult UpdateSeminarById([FromRoute] long seminarId, [FromBody] Seminar updated)
         {
-            return NoContent();
+            if (User.Type() != Type.Teacher)
+            {
+                return StatusCode(403, new { msg = "权限不足" });
+            }
+
+            try
+            {
+                _seminarService.UpdateSeminarBySeminarId(seminarId, updated);
+                return NoContent();
+            }
+            catch (SeminarNotFoundException)
+            {
+                return StatusCode(404, new { msg = "讨论课不存在" });
+            }
         }
 
         [HttpGet("/seminar/{seminarId:long}/topic")]
         public IActionResult GetTopicsBySeminarId([FromRoute] long seminarId)
         {
-            return Json(new List<Topic>());
+            try
+            {
+                return Json(_topicService.ListTopicBySeminarId(seminarId));
+            }
+            catch (SeminarNotFoundException)
+            {
+                return StatusCode(404, new { msg = "讨论课不存在" });
+            }
         }
 
         [HttpPut("/seminar/{seminarId:long}/topic")]
