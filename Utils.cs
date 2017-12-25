@@ -1,20 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Reflection;
 using System.Security.Claims;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
+using Type = Xmu.Crms.Shared.Models.Type;
 
 namespace Xmu.Crms.Insomnia
 {
     public static class Utils
     {
-        public static JwtHeader JwtHeader { get; set; }
-
         public static long Id(this ClaimsPrincipal user) => long.Parse(user.Claims.Single(c => c.Type == "id").Value);
+
+        public static Type Type(this ClaimsPrincipal user) => Enum.Parse<Type>(user.Claims.Single(c => c.Type == "type").Value, true);
 
         private static readonly List<JsonConverter> _StringEnumConverter =
             new List<JsonConverter> { new StringEnumConverter() };
