@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +24,7 @@ namespace Xmu.Crms.Insomnia
             _header = header;
         }
 
-        [Authorize]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("/me")]
         public IActionResult GetCurrentUser()
         {
@@ -48,38 +49,39 @@ namespace Xmu.Crms.Insomnia
         [HttpPost("/signin")]
         public IActionResult SigninPassword([FromBody] UsernameAndPassword uap)
         {
-            try
-            {
-                var user = _service.SignUpPhone(new UserInfo {Phone = uap.Phone, Password = uap.Password});
-                return Json(new SigninResult
-                {
-                    Exp = DateTime.UtcNow.AddDays(7)
-                              .Subtract(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks /
-                          TimeSpan.TicksPerSecond,
-                    Id = user.Id,
-                    Name = user.Name,
-                    Jwt = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(_header,
-                        new JwtPayload(
-                            null,
-                            null,
-                            new[]
-                            {
-                                new Claim("id", user.Id.ToString()),
-                                new Claim("type", ""),
-                            },
-                            null,
-                            DateTime.Now.AddDays(7)
-                        )))
-                });
-            }
-            catch (PasswordErrorException)
-            {
-                return StatusCode(401, new { msg = "用户名或密码错误" });
-            }
-            catch (UserNotFoundException)
-            {
-                return StatusCode(404, new { msg = "用户不存在" });
-            }
+            //try
+            //{
+            //    var user = _service.SignUpPhone(new UserInfo {Phone = uap.Phone, Password = uap.Password});
+            //    return Json(new SigninResult
+            //    {
+            //        Exp = DateTime.UtcNow.AddDays(7)
+            //                  .Subtract(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).Ticks /
+            //              TimeSpan.TicksPerSecond,
+            //        Id = user.Id,
+            //        Name = user.Name,
+            //        Jwt = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(_header,
+            //            new JwtPayload(
+            //                null,
+            //                null,
+            //                new[]
+            //                {
+            //                    new Claim("id", user.Id.ToString()),
+            //                    new Claim("type", ""),
+            //                },
+            //                null,
+            //                DateTime.Now.AddDays(7)
+            //            )))
+            //    });
+            //}
+            //catch (PasswordErrorException)
+            //{
+            //    return StatusCode(401, new { msg = "用户名或密码错误" });
+            //}
+            //catch (UserNotFoundException)
+            //{
+            //    return StatusCode(404, new { msg = "用户不存在" });
+            //}
+            return StatusCode(404, new { msg = "用户不存在" });
         }
 
         [HttpPost("/register")]

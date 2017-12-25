@@ -1,76 +1,209 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Models;
+using Xmu.Crms.Shared.Service;
+using System.Linq;
+using Xmu.Crms.Shared.Exceptions;
 
 namespace Xmu.Crms.Insomnia
 {
     [Route("")]
     [Produces("application/json")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class ClassController : Controller
     {
+        private readonly ICourseService _courseService;
+        private readonly IClassService _classService;
+        private readonly IUserService _userService;
+        private readonly IFixGroupService _fixGroupService;
+        private readonly ISeminarGroupService _seminarGroupService;
+        
+        private readonly JwtHeader _header;
+
+        public ClassController(ICourseService courseService, IClassService classService, 
+            IUserService userService, IFixGroupService fixGroupService, 
+            ISeminarGroupService seminarGroupService, JwtHeader header)
+        {
+            _courseService = courseService;
+            _classService = classService;
+            _userService = userService;
+            _fixGroupService = fixGroupService;
+            _seminarGroupService = seminarGroupService;
+            _header = header;
+        }
+
         [HttpGet("/class")]
         public IActionResult GetUserClasses()
         {
-            var c1 = new ClassInfo
+            //List<ClassInfo> classes = new List<ClassInfo>();
+            try
             {
-                Name= "周三1-2节",
-                Site="公寓405"
-            };
-            var c2 = new ClassInfo
+                var classes = _courseService.ListClassByUserId(User.Id());
+                return Json(classes.Select(c => new {name = c.Name, site = c.Site}));
+            }
+            catch (ArgumentException)
             {
-                Name = "一班",
-                Site = "海韵202"
-            };
-            return Json(new List<ClassInfo> {c1, c2});
+                return StatusCode(400, new {msg = "用户ID输入格式错误"});
+            }
+            
         }
 
         [HttpPost("/class")]
         public IActionResult CreateClass([FromBody] ClassInfo newClass)
         {
-            return Created("/class/1", newClass);
+            var userlogin = _userService.GetUserByUserId(User.Id());
+            if (userlogin.Type == Shared.Models.Type.Teacher)
+            {
+                var classId = _classService.InsertClassById(User.Id(), newClass.Course.Id, newClass);
+                return Created($"/class/{classId}", newClass);
+            }
+            return StatusCode(403, new {msg = "权限不足"});
         }
 
         [HttpGet("/class/{classId:long}")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public IActionResult GetClassById([FromRoute] long classId)
         {
-            var c2 = new ClassInfo
+            try
             {
-                Name = "一班",
-                Site = "海韵202"
-            };
-            return Json(c2);
+                var classinfo = _classService.GetClassByClassId(classId);
+                return Json(new {name = classinfo.Name, site = classinfo.Site});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID输入格式有误"});
+            }
         }
 
         [HttpDelete("/class/{classId:long}")]
         public IActionResult DeleteClassById([FromRoute] long classId)
         {
-            return NoContent();
+            try
+            {
+                var userlogin = _userService.GetUserByUserId(User.Id());
+                if (userlogin.Type == Shared.Models.Type.Teacher)
+                {
+                    _classService.DeleteClassByClassId(classId);
+                    return NoContent();
+                }
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new {msg = "班级不存在"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID输入格式有误"});
+            }
+            
         }
 
         [HttpPut("/class/{classId:long}")]
         public IActionResult UpdateClassById([FromRoute] long classId, [FromBody] ClassInfo updated)
         {
-            return NoContent();
+            try
+            {
+                var userlogin = _userService.GetUserByUserId(User.Id());
+                if (userlogin.Type == Shared.Models.Type.Teacher)
+                {
+                    _classService.UpdateClassByClassId(classId, updated);
+                    return NoContent();
+                }
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new {msg = "班级不存在"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID输入格式有误"});
+            }
+            
         }
 
         [HttpGet("/class/{classId:long}/student")]
-        public IActionResult GetStudentsByClassId([FromRoute] long classId)
+        public IActionResult GetStudentsByClassId([FromRoute] long classId,[FromQuery] string numBeginWith, string nameBeginWith)
         {
-            return Json(new List<ClassInfo>());
+            try
+            {
+                var users = _userService.ListUserByClassId(classId, numBeginWith, nameBeginWith);
+                return Json(users.Select(u => new {id = u.Id, name = u.Name, number = u.Number}));
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new {msg = "班级格式输入有误"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID输入格式有误"});
+            }
+            //return Json(new List<ClassInfo>());
         }
 
         [HttpPost("/class/{classId:long}/student")]
         public IActionResult SelectClass([FromRoute] long classId, [FromBody] UserInfo student)
         {
-            return Created("/class/1/student/1", new Dictionary<string, string> {["url"] = " /class/1/student/1"});
+            try
+            {
+                var user = student;
+                var userlogin = _userService.GetUserByUserId(User.Id());
+                if (userlogin.Type == Shared.Models.Type.Student)
+                {
+                    if (User.Id() == student.Id)
+                    {
+                        _classService.InsertCourseSelectionById(student.Id, classId);
+                        return Created($"/class/{classId}/student/{student.Id}",
+                            new Dictionary<string, string> {["url"] = $"/class/{classId}/student/{student.Id}"});
+                    }
+                    return StatusCode(403, new {msg = "学生无法为他人选课"});
+                }
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new {msg = "班级不存在"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID输入格式有误"});
+            }
         }
 
         [HttpDelete("/class/{classId:long}/student/{studentId:long}")]
         public IActionResult DeselectClass([FromRoute] long classId, [FromRoute] long studentId)
         {
-            return NoContent();
+            try
+            {
+                var userlogin = _userService.GetUserByUserId(User.Id());
+                if (userlogin.Type == Shared.Models.Type.Student)
+                {
+                    if (studentId == User.Id())
+                    {
+                        _classService.DeleteCourseSelectionById(studentId, classId);
+                        return NoContent();
+                    }
+                    return StatusCode(403, new {msg = "用户无法为他人退课"});
+                }
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "错误的ID格式"});
+            }
+           
         }
 
+
+
+        /*
+         * 移到seminar中
+         */
         [HttpGet("/class/{classId:long}/attendance")]
         public IActionResult GetAttendanceByClassId([FromRoute] long classId)
         {
@@ -84,31 +217,47 @@ namespace Xmu.Crms.Insomnia
             return NoContent();
         }
 
+
+
+
+
+
         [HttpGet("/class/{classId}/classgroup")]
         public IActionResult GetUserClassGroupByClassId([FromRoute] long classId)
         {
-            var gu1 = new GroupUser()
+            try
             {
-                IsLeader=true,
-                Id= 2757,
-                Name="张三",
-                Number= "23320152202333"
-            };
-            var gu2 = new GroupUser()
+                var userlogin = _userService.GetUserByUserId(User.Id());
+                if (userlogin.Type == Shared.Models.Type.Student)
+                {
+                    var group = _fixGroupService.GetFixedGroupById(User.Id(), classId);
+                    var leader = group.Leader;
+                    var _members = _fixGroupService.ListFixGroupMemberByGroupId(group.Id);
+                    //members.Add(group.Leader);
+                    var result = Json(
+                        new
+                        {
+                            leader = new
+                            {
+                                id = leader.Id,
+                                name = leader.Name,
+                                number = leader.Number
+                            },
+                            members = _members.Select(m => new
+                            {
+                                id = m.Id,
+                                name = m.Name,
+                                number = m.Number
+                            })
+                        });
+                    return result;
+                }
+                return StatusCode(403, new {msg = "权限不足"});
+            }
+            catch (ArgumentException)
             {
-                IsLeader = false,
-                Id = 2756,
-                Name = "李四",
-                Number = "23320152202443"
-            };
-            var gu3 = new GroupUser()
-            {
-                IsLeader = false,
-                Id = 2777,
-                Name = "王五",
-                Number = "23320152202433"
-            };
-            return Json(new List<GroupUser> {gu1, gu2, gu3});
+                return StatusCode(400, new {msg = "课程ID格式错误"});
+            }
         }
 
         [HttpPut("/class/{classId}/classgroup")]

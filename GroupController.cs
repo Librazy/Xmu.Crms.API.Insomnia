@@ -1,13 +1,41 @@
 ﻿using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Models;
+using Xmu.Crms.Shared.Service;
 
 namespace Xmu.Crms.Insomnia
 {
     [Route("")]
     [Produces("application/json")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class GroupController : Controller
     {
+        private readonly ICourseService _courseService;
+        private readonly IClassService _classService;
+        private readonly IUserService _userService;
+        private readonly IFixGroupService _fixGroupService;
+        private readonly ISeminarGroupService _seminarGroupService;
+        private readonly ISeminarService _seminarService;
+
+        private readonly JwtHeader _header;
+
+        public GroupController(ICourseService courseService, IClassService classService,
+            IUserService userService, IFixGroupService fixGroupService,
+            ISeminarGroupService seminarGroupService,
+            ISeminarService seminarService, JwtHeader header)
+        {
+            _courseService = courseService;
+            _classService = classService;
+            _userService = userService;
+            _fixGroupService = fixGroupService;
+            _seminarGroupService = seminarGroupService;
+            _seminarService = seminarService;
+            _header = header;
+        }
+
         [HttpGet("/group/{groupId:long}")]
         public IActionResult GetGroupById([FromRoute] long groupId)
         {
@@ -23,6 +51,7 @@ namespace Xmu.Crms.Insomnia
         [HttpPut("/group/{groupId:long}")]
         public IActionResult UpdateGroupById([FromRoute] long groupId, [FromBody] SeminarGroup updated)
         {
+
             return NoContent();
         }
 
