@@ -42,7 +42,7 @@ namespace Xmu.Crms.Insomnia
             //List<ClassInfo> classes = new List<ClassInfo>();
             try
             {
-                var classes = _courseService.ListClassByUserId(User.Id());
+                var classes = _classService.ListClassByUserId(User.Id());
                 return Json(classes.Select(c => new {name = c.Name, site = c.Site}));
             }
             catch (ArgumentException)
@@ -58,7 +58,7 @@ namespace Xmu.Crms.Insomnia
             var userlogin = _userService.GetUserByUserId(User.Id());
             if (userlogin.Type == Shared.Models.Type.Teacher)
             {
-                var classId = _classService.InsertClassById(User.Id(), newClass.Course.Id, newClass);
+                var classId = _courseService.InsertClassById(newClass.Course.Id, newClass);
                 return Created($"/class/{classId}", newClass);
             }
             return StatusCode(403, new {msg = "权限不足"});
@@ -199,28 +199,22 @@ namespace Xmu.Crms.Insomnia
            
         }
 
-
-
         /*
-         * 移到seminar中
+         * 这两部分移除，放在SeminarController里面
          */
-        [HttpGet("/class/{classId:long}/attendance")]
-        public IActionResult GetAttendanceByClassId([FromRoute] long classId)
-        {
-            return Json(new List<ClassInfo>());
-        }
+        //[HttpGet("/class/{classId:long}/attendance")]
+        //public IActionResult GetAttendanceByClassId([FromRoute] long classId)
+        //{
+            
+        //    return Json(new List<ClassInfo>());
+        //}
 
-        [HttpPut("/class/{classId:long}/attendance/{studentId:long}")]
-        public IActionResult UpdateAttendanceByClassId([FromRoute] long classId, [FromRoute] long studentId,
-            [FromBody] Location loc)
-        {
-            return NoContent();
-        }
-
-
-
-
-
+        //[HttpPut("/class/{classId:long}/attendance/{studentId:long}")]
+        //public IActionResult UpdateAttendanceByClassId([FromRoute] long classId, [FromRoute] long studentId,
+        //    [FromBody] Location loc)
+        //{
+        //    return NoContent();
+        //}
 
         [HttpGet("/class/{classId}/classgroup")]
         public IActionResult GetUserClassGroupByClassId([FromRoute] long classId)
@@ -260,10 +254,105 @@ namespace Xmu.Crms.Insomnia
             }
         }
 
-        [HttpPut("/class/{classId}/classgroup")]
-        public IActionResult UpdateUserClassGroupByClassId([FromRoute] long classId)
+        /*
+         * 这一部分删去，增加了新的方法
+         */
+        //[HttpPut("/class/{classId}/classgroup")]
+        //public IActionResult UpdateUserClassGroupByClassId([FromRoute] long classId, [FromBody] FixGroup updated)
+        //{
+        //    try
+        //    {
+                
+        //        return NoContent();
+        //    }
+        //    catch (ClassNotFoundException)
+        //    {
+        //        return StatusCode(404, new {msg = "不存在当前班级"});
+        //    }
+        //    catch (ArgumentException)
+        //    {
+        //        return StatusCode(400, new {msg = "班级ID格式有误"});
+        //    }
+        //}
+
+        /*
+         * 以下的四个controller为新添加的controller
+         * 前两个方法模块组的同学说不会被调用，先不写
+         */
+        [HttpPut("/class/{classId}/classgroup/resign")]
+        public IActionResult GroupLeaderResignByClassId([FromRoute] long classId, [FromBody] UserInfo student)
         {
-            return NoContent();
+            try
+            {
+                //var groupId = _fixGroupService.GetFixedGroupById()
+                //_seminarGroupService.ResignLeaderById
+                return NoContent();
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new {msg = "不存在当前班级"});
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new {msg = "班级ID格式错误"});
+            }
+        }
+
+        [HttpPut("/class/{classId}/classgroup/assign")]
+        public IActionResult GroupLeaderAssignByClassId([FromRoute] long classId, [FromBody] UserInfo student)
+        {
+            try
+            {
+                //var groupId = _fixGroupService.GetFixedGroupById()
+                //_seminarGroupService.ResignLeaderById
+                return NoContent();
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new { msg = "不存在当前班级" });
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new { msg = "班级ID格式错误" });
+            }
+        }
+
+        [HttpPut("/class/{classId}/classgroup/add")]
+        public IActionResult AddGroupMemberByClassId([FromRoute] long classId, [FromBody] UserInfo student)
+        {
+            try
+            {
+                var group = _fixGroupService.GetFixedGroupById(User.Id(), classId);
+                _fixGroupService.InsertStudentIntoGroup(student.Id, group.Id);
+                return NoContent();
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new { msg = "不存在当前班级" });
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new { msg = "班级ID格式错误" });
+            }
+        }
+
+        [HttpPut("/class/{classId}/classgroup/remove")]
+        public IActionResult RemoveGroupMemberByClassId([FromRoute] long classId, [FromBody] UserInfo student)
+        {
+            try
+            {
+                var group = _fixGroupService.GetFixedGroupById(User.Id(), classId);
+                _fixGroupService.DeleteFixGroupUserById(group.Id, student.Id);
+                return NoContent();
+            }
+            catch (ClassNotFoundException)
+            {
+                return StatusCode(404, new { msg = "不存在当前班级" });
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new { msg = "班级ID格式错误" });
+            }
         }
 
         public class Attendance

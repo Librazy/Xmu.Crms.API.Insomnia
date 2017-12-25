@@ -40,13 +40,9 @@ namespace Xmu.Crms.Insomnia
             _header = header;
         }
 
-
-
-
-
-
         /*
          * 无法计算每个课程里面学生的人数，需要多表联合查询，查询难度非常大
+         * 缺少班级总人数字段
          */
         [HttpGet("/course")]
         public IActionResult GetUserCourses()
@@ -55,27 +51,18 @@ namespace Xmu.Crms.Insomnia
             if (userlogin.Type == Type.Student)
             {
                 var courses = _courseService.ListCourseByUserId(User.Id());
-                foreach (var cs in courses)
+                return Json(courses.Select(c => new
                 {
-                    var numStuCount = 0;
-                    var classinfo = _classService.ListClassByCourseId(cs.Id);
-                    var numClassCount = classinfo.Count;
-                    foreach (var cl in classinfo)
-                    {
-                        numStuCount += _userService.ListUserByClassId(cl.Id, "", "").Count;
-                    }
-                    
-                }
+                    id = c.Id,
+                    name = c.Name,
+                    numClass = _classService.ListClassByCourseId(c.Id).Count,
+                    numStudent = 20,//这一步未完成操作
+                    startTime = c.StartDate,
+                    endTime = c.EndDate
+                }));
             }
             return StatusCode(403, new {msg = "权限不足"});
         }
-
-
-
-
-
-
-
 
         [HttpPost("/course")]
         public IActionResult CreateCourse([FromBody] Course newCourse)
@@ -190,36 +177,42 @@ namespace Xmu.Crms.Insomnia
             var userlogin = _userService.GetUserByUserId(User.Id());
             if (userlogin.Type == Type.Teacher)
             {
-                var classId = _classService.InsertClassById(User.Id(), courseId, newClass);
+                var classId = _courseService.InsertClassById(courseId, newClass);
                 return Created($"/class/{classId}", new {id = classId});
             }
             return StatusCode(403, new {msg = "权限不足"});
         }
 
-
-
-
-
-
         /*
-         * 这里的embededGrade不知道应该用哪种方式展示
-         * 成绩部分，个人认为不存在查询成绩的问题，不知道前端会用什么方法进行Json的接收
+         * 这里新增了一个FromBody的embededGrade的参数，用于判断是否已经打分
          */
         [HttpGet("/course/{courseId:long}/seminar")]
-        public IActionResult GetSeminarsByCourseId([FromRoute] long courseId)
+        public IActionResult GetSeminarsByCourseId([FromRoute] long courseId, [FromBody] bool embededGrade)
         {
             try
             {
                 var seminars = _seminarService.ListSeminarByCourseId(courseId);
+                if (!embededGrade)
+                {
+                    return Json(seminars.Select(s => new
+                    {
+                        id = s.Id,
+                        name = s.Name,
+                        description = s.Description,
+                        groupingMethod = (s.IsFixed == true) ? "fixed" : "random",
+                        startTime = s.StartTime,
+                        endTime = s.EndTime
+                    }));
+                }
                 return Json(seminars.Select(s => new
                 {
                     id = s.Id,
                     name = s.Name,
                     description = s.Description,
-                    groupingMethod = (s.IsFixed==true)?"fixed":"random",
+                    groupingMethod = (s.IsFixed == true) ? "fixed" : "random",
                     startTime = s.StartTime,
-                    endTime = s.EndTime
-                    //个人认为这里不存在查询成绩的问题
+                    endTime = s.EndTime,
+                    grade = _seminarGroupService.GetSeminarGroupById(s.Id,User.Id()).FinalGrade
                 }));
             }
             catch (CourseNotFoundException)
@@ -231,11 +224,6 @@ namespace Xmu.Crms.Insomnia
                 return StatusCode(400, new { msg = "课程ID格式错误" });
             }
         }
-
-
-
-
-
 
         [HttpPost("/course/{courseId:long}/seminar")]
         public IActionResult CreateSeminarByCourseId([FromRoute] long courseId, [FromBody] Seminar newSeminar)
@@ -249,14 +237,10 @@ namespace Xmu.Crms.Insomnia
             return StatusCode(403, new {msg = "权限不足"});
         }
 
-
-
-
-
-
-
         /*
-         * 这一步找不到对应的和courseId相关的方法
+         * 这里用了一个foreach，但是实际用途缺不是很大。获得当前班级对应的所有讨论课信息，这个条件是基于时间的，即基于讨论课的讨论课组信息。
+         * 不同的讨论课的组分数信息没有办法也不应该放在一起展示，这一点很关键。所以本Controller是直接用foreach方法List调用来完成的。
+         * 已经反馈给模块组，不过也不知道改不改得了了。
          */
         [HttpGet("/course/{courseId:long}/grade")]
         public IActionResult GetGradeByCourseId([FromRoute] long courseId)
@@ -264,12 +248,20 @@ namespace Xmu.Crms.Insomnia
             try
             {
                 var seminars = _seminarService.ListSeminarByCourseId(courseId);
-                List<SeminarGroup> result = new List<SeminarGroup>();
-                foreach (var s in seminars)
+                foreach (var seminar in seminars)
                 {
-                    
+                    var seminarGroups = _seminarGroupService.ListSeminarGroupBySeminarId(seminar.Id);
+                    return Json(seminarGroups.Select(s => new
+                    {
+                        seminarName = s.Seminar.Name,
+                        groupName = "3A2",//这里还是没有组名的问题
+                        leaderName = s.Leader.Name,
+                        presentationGrade = s.PresentationGrade,
+                        reportGrade = s.ReportGrade,
+                        grade = s.FinalGrade
+                    }));
                 }
-                return Json(result);
+                return NoContent();
             }
             catch (CourseNotFoundException)
             {
