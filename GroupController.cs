@@ -16,16 +16,11 @@ namespace Xmu.Crms.Insomnia
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class GroupController : Controller
     {
-        private readonly ICourseService _courseService;
-        private readonly IClassService _classService;
         private readonly IUserService _userService;
         private readonly IFixGroupService _fixGroupService;
         private readonly ISeminarGroupService _seminarGroupService;
-        private readonly ISeminarService _seminarService;
         private readonly ITopicService _topicService;
         private readonly IGradeService _gradeService;
-
-        private readonly JwtHeader _header;
 
         public GroupController(ICourseService courseService, IClassService classService,
             IUserService userService, IFixGroupService fixGroupService,
@@ -33,15 +28,11 @@ namespace Xmu.Crms.Insomnia
             ISeminarService seminarService, 
             IGradeService gradeService, JwtHeader header)
         {
-            _courseService = courseService;
-            _classService = classService;
             _userService = userService;
             _fixGroupService = fixGroupService;
             _seminarGroupService = seminarGroupService;
             _topicService = topicService;
-            _seminarService = seminarService;
             _gradeService = gradeService;
-            _header = header;
         }
 
         /*
@@ -52,11 +43,9 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
                 var group = _seminarGroupService.GetSeminarGroupByGroupId(groupId);
-                var _members = _seminarGroupService.ListSeminarGroupMemberByGroupId(groupId);
-                var _topics = _topicService.ListSeminarGroupTopicByGroupId(groupId);
-                var report = "";
+                var members = _seminarGroupService.ListSeminarGroupMemberByGroupId(groupId);
+                var topics = _topicService.ListSeminarGroupTopicByGroupId(groupId);
                 return Json(new
                 {
                     id = group.Id,
@@ -66,12 +55,12 @@ namespace Xmu.Crms.Insomnia
                         id = group.Leader.Id,
                         name = group.Leader.Name
                     },
-                    members = _members.Select(m => new
+                    members = members.Select(m => new
                     {
                         id = m.Id,
                         name = m.Name
                     }),
-                    topics = _topics.Select(t => new
+                    topics = topics.Select(t => new
                     {
                         id = t.Topic.Id,
                         name = t.Topic.Name
@@ -166,7 +155,6 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
                 var group = _seminarGroupService.GetSeminarGroupByGroupId(groupId);
                 var pGradeTopics = _topicService.ListSeminarGroupTopicByGroupId(groupId);
                 return Json(new
