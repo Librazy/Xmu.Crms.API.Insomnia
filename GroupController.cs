@@ -86,13 +86,13 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
-                if (userlogin.Type == Shared.Models.Type.Teacher)
+                if (User.Type() != Shared.Models.Type.Teacher)
                 {
-                    _fixGroupService.UpdateFixGroupByGroupId(groupId, updated);
-                    return NoContent();
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new {msg = "权限不足"});
+
+                _fixGroupService.UpdateFixGroupByGroupId(groupId, updated);
+                return NoContent();
             }
             catch (GroupNotFoundException)
             {
@@ -109,13 +109,13 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
-                if (userlogin.Type == Shared.Models.Type.Student)
+                if (User.Type() != Shared.Models.Type.Student)
                 {
-                    _seminarGroupService.InsertTopicByGroupId(groupId, selected.Id); 
-                    return Created($"/group/{groupId}/topic/{selected.Id}", new Dictionary<string, string> {["url"] = $" /group/{groupId}/topic/{selected.Id}"});
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new {msg = "权限不足"});
+
+                _seminarGroupService.InsertTopicByGroupId(groupId, selected.Id); 
+                return Created($"/group/{groupId}/topic/{selected.Id}", new Dictionary<string, string> {["url"] = $" /group/{groupId}/topic/{selected.Id}"});
             }
             catch (GroupNotFoundException)
             {
@@ -132,13 +132,13 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
-                if (userlogin.Type == Shared.Models.Type.Student)
+                if (User.Type() != Shared.Models.Type.Student)
                 {
-                    _topicService.DeleteSeminarGroupTopicById(groupId, topicId);
-                    return NoContent();
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new { msg = "权限不足" });
+
+                _topicService.DeleteSeminarGroupTopicById(groupId, topicId);
+                return NoContent();
             }
             catch (GroupNotFoundException)
             {
@@ -184,15 +184,17 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
-
-                if (userlogin.Type == Shared.Models.Type.Teacher)
+                if (User.Type() != Shared.Models.Type.Teacher)
                 {
-                    if (updated.Grade != null)
-                        _gradeService.UpdateGroupByGroupId(groupId, (int) updated.Grade);
-                    return NoContent();
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new { msg = "权限不足" });
+
+                if (updated.Grade != null)
+                {
+                    _gradeService.UpdateGroupByGroupId(groupId, (int) updated.Grade);
+                }
+
+                return NoContent();
             }
             catch (GroupNotFoundException)
             {
@@ -211,16 +213,19 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var userlogin = _userService.GetUserByUserId(User.Id());
-
-                if (userlogin.Type == Shared.Models.Type.Student)
+                if (User.Type() != Shared.Models.Type.Student)
                 {
-                    if (updated.Grade != null)
-                        _gradeService.InsertGroupGradeByUserId(updated.SeminarGroupTopic.Topic.Id, updated.Student.Id,
-                            groupId, (int) updated.Grade);
+                    return StatusCode(403, new {msg = "权限不足"});
+                }
+
+                if (updated.Grade == null)
+                {
                     return NoContent();
                 }
-                return StatusCode(403, new { msg = "权限不足" });
+
+                _gradeService.InsertGroupGradeByUserId(updated.SeminarGroupTopic.Topic.Id, updated.Student.Id,
+                    groupId, (int) updated.Grade);
+                return NoContent();
             }
             catch (GroupNotFoundException)
             {

@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,10 +19,13 @@ namespace Xmu.Crms.Insomnia
         private readonly ITopicService _topicService;
         private readonly IUserService _userService;
         private readonly ISeminarGroupService _seminargroupService;
-        public SeminarController(ISeminarService seminarService, ITopicService topicService)
+
+        public SeminarController(ISeminarService seminarService, ITopicService topicService, ISeminarGroupService seminargroupService, IUserService userService)
         {
             _seminarService = seminarService;
             _topicService = topicService;
+            _seminargroupService = seminargroupService;
+            _userService = userService;
         }
 
         [HttpGet("/seminar/{seminarId:long}")]
@@ -48,12 +49,10 @@ namespace Xmu.Crms.Insomnia
         [HttpPut("/seminar/{seminarId:long}")]
         public IActionResult UpdateSeminarById([FromRoute] long seminarId, [FromBody] Seminar updated)
         {
-            var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type != Type.Teacher)
+            if (User.Type() != Type.Teacher)
             {
                 return StatusCode(403, new { msg = "权限不足" });
             }
-
             try
             {
                 _seminarService.UpdateSeminarBySeminarId(seminarId, updated);
@@ -71,8 +70,7 @@ namespace Xmu.Crms.Insomnia
         [HttpDelete("/seminar/{seminarId:long}")]
         public IActionResult DeleteSeminarById([FromRoute] long seminarId)
         {
-            var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type != Type.Teacher)
+            if (User.Type() != Type.Teacher)
             {
                 return StatusCode(403, new { msg = "权限不足" });
             }
@@ -91,38 +89,21 @@ namespace Xmu.Crms.Insomnia
             }
         }
 
-
-
-
-
-
-
-
-        //serial  groupLeft未加
+        //groupLeft未加
         [HttpGet("/seminar/{seminarId:long}/topic")]
         public IActionResult GetTopicsBySeminarId([FromRoute] long seminarId)
         {
-            /*
-             * "id": 257,
-    "serial": "A",
-    "name": "领域模型与模块",
-    "description": "Domain model与模块划分",
-    "groupLimit": 5,
-    "groupMemberLimit": 6,
-    "groupLeft": 2
-             */
-
             try
             {
                 var topics = _topicService.ListTopicBySeminarId(seminarId);
                 return Json(topics.Select(t => new
                 {
                     id = t.Id,
+                    serial = t.Serial,
                     name = t.Name,
                     description = t.Description,
                     groupLimit = t.GroupNumberLimit,
                     groupMemberLimit = t.GroupStudentLimit,
-
                 }));
             }
             catch (SeminarNotFoundException)
@@ -138,18 +119,14 @@ namespace Xmu.Crms.Insomnia
         [HttpPut("/seminar/{seminarId:long}/topic")]
         public IActionResult CreateTopicBySeminarId([FromRoute] long seminarId, [FromBody] Topic newTopic)
         {
-            var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Shared.Models.Type.Teacher)
+            if (User.Type() != Type.Teacher)
             {
-                var topicid = _topicService.InsertTopicBySeminarId(seminarId, newTopic);
-                return Created("/topic/" + topicid, newTopic);
+                return StatusCode(403, new {msg = "权限不足"});
             }
-            return StatusCode(403, new { msg = "权限不足" });
+
+            var topicid = _topicService.InsertTopicBySeminarId(seminarId, newTopic);
+            return Created("/topic/" + topicid, newTopic);
         }
-
-
-
-
 
         //没有小组成员 和 report
         [HttpGet("/seminar/{seminarId:long}/group")]

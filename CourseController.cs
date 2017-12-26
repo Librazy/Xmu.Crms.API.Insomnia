@@ -24,12 +24,12 @@ namespace Xmu.Crms.Insomnia
         private readonly ISeminarGroupService _seminarGroupService;
         private readonly ISeminarService _seminarService;
 
-        private readonly JwtHeader _header;
+        private readonly CrmsContext _db;
 
         public CourseController(ICourseService courseService, IClassService classService,
             IUserService userService, IFixGroupService fixGroupService,
             ISeminarGroupService seminarGroupService,
-            ISeminarService seminarService, JwtHeader header)
+            ISeminarService seminarService, CrmsContext db)
         {
             _courseService = courseService;
             _classService = classService;
@@ -37,7 +37,7 @@ namespace Xmu.Crms.Insomnia
             _fixGroupService = fixGroupService;
             _seminarGroupService = seminarGroupService;
             _seminarService = seminarService;
-            _header = header;
+            _db = db;
         }
 
         /*
@@ -48,32 +48,46 @@ namespace Xmu.Crms.Insomnia
         public IActionResult GetUserCourses()
         {
             var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Type.Student)
+            if (userlogin.Type != Type.Teacher)
             {
-                var courses = _courseService.ListCourseByUserId(User.Id());
-                return Json(courses.Select(c => new
-                {
-                    id = c.Id,
-                    name = c.Name,
-                    numClass = _classService.ListClassByCourseId(c.Id).Count,
-                    numStudent = 20,//这一步未完成操作
-                    startTime = c.StartDate,
-                    endTime = c.EndDate
-                }));
+                return StatusCode(403, new {msg = "权限不足"});
             }
-            return StatusCode(403, new { msg = "权限不足" });
+
+            var courses = _courseService.ListCourseByUserId(User.Id());
+            return Json(courses.Select(c => new
+            {
+                id = c.Id,
+                name = c.Name,
+                numClass = _classService.ListClassByCourseId(c.Id).Count,
+                numStudent = _classService.ListClassByCourseId(c.Id).Aggregate(0, (total, cls) => _db.Entry(cls).Collection(cl => cl.CourseSelections).Query().Count() + total),
+                startTime = c.StartDate.ToString("yyyy-MM-dd"),
+                endTime = c.EndDate.ToString("yyyy-MM-dd"),
+            }));
         }
 
         [HttpPost("/course")]
-        public IActionResult CreateCourse([FromBody] Course newCourse)
+        public IActionResult CreateCourse([FromBody] CourseWithProportions newCourse)
         {
             var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Type.Teacher)
+            if (userlogin.Type != Type.Teacher)
             {
-                _courseService.InsertCourseByUserId(User.Id(), newCourse);
-                return Created($"/course/{newCourse.Id}", new { id = newCourse.Id });
+                return StatusCode(403, new {msg = "权限不足"});
             }
-            return StatusCode(403, new { msg = "权限不足" });
+
+            var id = _courseService.InsertCourseByUserId(User.Id(), new Course
+            {
+                Name = newCourse.Name,
+                Description = newCourse.Description,
+                StartDate = newCourse.StartTime,
+                EndDate = newCourse.EndTime,
+                ThreePointPercentage = newCourse.Proportions.C,
+                FourPointPercentage = newCourse.Proportions.B,
+                FivePointPercentage = newCourse.Proportions.A,
+                ReportPercentage = newCourse.Proportions.Report,
+                PresentationPercentage = newCourse.Proportions.Presentation,
+                TeacherId = User.Id()
+            });
+            return Created($"/course/{id}", new { id });
 
         }
 
@@ -172,22 +186,33 @@ namespace Xmu.Crms.Insomnia
         }
 
         [HttpPost("/course/{courseId:long}/class")]
-        public IActionResult CreateClassByCourseId([FromRoute] long courseId, [FromBody] ClassInfo newClass)
+        public IActionResult CreateClassByCourseId([FromRoute] long courseId, [FromBody] ClassWithProportions newClass)
         {
             var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Type.Teacher)
+            if (userlogin.Type != Type.Teacher)
             {
-                var classId = _courseService.InsertClassById(courseId, newClass);
-                return Created($"/class/{classId}", new { id = classId });
+                return StatusCode(403, new {msg = "权限不足"});
             }
-            return StatusCode(403, new { msg = "权限不足" });
+
+            var classId = _courseService.InsertClassById(courseId, new ClassInfo
+            {
+                Name = newClass.Name,
+                ClassTime = newClass.Time,
+                Site = newClass.Site,
+                ThreePointPercentage = newClass.Proportions.C,
+                FourPointPercentage = newClass.Proportions.B,
+                FivePointPercentage = newClass.Proportions.A,
+                ReportPercentage = newClass.Proportions.Report,
+                PresentationPercentage = newClass.Proportions.Presentation
+            });
+            return Created($"/class/{classId}", new { id = classId });
         }
 
         /*
          * 这里新增了一个FromBody的embededGrade的参数，用于判断是否已经打分
          */
         [HttpGet("/course/{courseId:long}/seminar")]
-        public IActionResult GetSeminarsByCourseId([FromRoute] long courseId, [FromBody] bool embededGrade)
+        public IActionResult GetSeminarsByCourseId([FromRoute] long courseId, [FromQuery] bool embededGrade)
         {
             try
             {
@@ -200,8 +225,8 @@ namespace Xmu.Crms.Insomnia
                         name = s.Name,
                         description = s.Description,
                         groupingMethod = (s.IsFixed == true) ? "fixed" : "random",
-                        startTime = s.StartTime,
-                        endTime = s.EndTime
+                        startTime = s.StartTime.ToString("YYYY-MM-dd"),
+                        endTime = s.EndTime.ToString("YYYY-MM-dd")
                     }));
                 }
                 return Json(seminars.Select(s => new
@@ -210,8 +235,8 @@ namespace Xmu.Crms.Insomnia
                     name = s.Name,
                     description = s.Description,
                     groupingMethod = (s.IsFixed == true) ? "fixed" : "random",
-                    startTime = s.StartTime,
-                    endTime = s.EndTime,
+                    startTime = s.StartTime.ToString("YYYY-MM-dd"),
+                    endTime = s.EndTime.ToString("YYYY-MM-dd"),
                     grade = _seminarGroupService.GetSeminarGroupById(s.Id, User.Id()).FinalGrade
                 }));
             }
@@ -272,5 +297,35 @@ namespace Xmu.Crms.Insomnia
                 return StatusCode(400, new { msg = "课程ID格式错误" });
             }
         }
+    }
+
+    public class CourseWithProportions
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public Proportions Proportions { get; set; }
+    }
+
+
+    public class ClassWithProportions
+    {
+        public string Name { get; set; }
+
+        public string Site { get; set; }
+
+        public string Time { get; set; }
+
+        public Proportions Proportions { get; set; }
+    }
+
+    public class Proportions
+    {
+        public int Report { get; set; }
+        public int Presentation { get; set; }
+        public int C { get; set; }
+        public int B { get; set; }
+        public int A { get; set; }
     }
 }

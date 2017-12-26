@@ -20,20 +20,17 @@ namespace Xmu.Crms.Insomnia
         private readonly IClassService _classService;
         private readonly IUserService _userService;
         private readonly IFixGroupService _fixGroupService;
-        private readonly ISeminarGroupService _seminarGroupService;
-        
-        private readonly JwtHeader _header;
+        private readonly ISeminarService _seminarService;
 
         public ClassController(ICourseService courseService, IClassService classService, 
-            IUserService userService, IFixGroupService fixGroupService, 
-            ISeminarGroupService seminarGroupService, JwtHeader header)
+            IUserService userService, IFixGroupService fixGroupService,
+            ISeminarService seminarService)
         {
             _courseService = courseService;
             _classService = classService;
             _userService = userService;
             _fixGroupService = fixGroupService;
-            _seminarGroupService = seminarGroupService;
-            _header = header;
+            _seminarService = seminarService;
         }
 
         [HttpGet("/class")]
@@ -52,26 +49,31 @@ namespace Xmu.Crms.Insomnia
             
         }
 
-        [HttpPost("/class")]
-        public IActionResult CreateClass([FromBody] ClassInfo newClass)
-        {
-            var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Shared.Models.Type.Teacher)
-            {
-                var classId = _courseService.InsertClassById(newClass.Course.Id, newClass);
-                return Created($"/class/{classId}", newClass);
-            }
-            return StatusCode(403, new {msg = "权限不足"});
-        }
-
         [HttpGet("/class/{classId:long}")]
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public IActionResult GetClassById([FromRoute] long classId)
         {
             try
             {
-                var classinfo = _classService.GetClassByClassId(classId);
-                return Json(new {name = classinfo.Name, site = classinfo.Site});
+                var cls = _classService.GetClassByClassId(classId);
+                var sems = _seminarService.ListSeminarByCourseId(cls.CourseId).FirstOrDefault(s => (_classService.GetCallStatusById(s.Id, cls.Id)?.Status ?? 0) == 1);
+                return Json(new { 
+                    id = cls.Id, 
+                    name = cls.Name, 
+                    time = cls.ClassTime, 
+                    site = cls.Site, 
+                    calling = sems?.Id ?? -1, 
+                    proportions = new
+                    {
+                        report = cls.ReportPercentage, 
+                        presentation = cls.PresentationPercentage,
+                        c = cls.ThreePointPercentage,
+                        b = cls.FourPointPercentage,
+                        a = cls.FivePointPercentage
+                    }
+
+                });
+
             }
             catch (ArgumentException)
             {
@@ -104,17 +106,28 @@ namespace Xmu.Crms.Insomnia
         }
 
         [HttpPut("/class/{classId:long}")]
-        public IActionResult UpdateClassById([FromRoute] long classId, [FromBody] ClassInfo updated)
+        public IActionResult UpdateClassById([FromRoute] long classId, [FromBody] ClassWithProportions updated)
         {
             try
             {
                 var userlogin = _userService.GetUserByUserId(User.Id());
-                if (userlogin.Type == Shared.Models.Type.Teacher)
+                if (userlogin.Type != Shared.Models.Type.Teacher)
                 {
-                    _classService.UpdateClassByClassId(classId, updated);
-                    return NoContent();
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new {msg = "权限不足"});
+                _classService.UpdateClassByClassId(classId, new ClassInfo
+                {
+                    Id = classId,
+                    Name = updated.Name,
+                    ClassTime = updated.Time,
+                    Site = updated.Site,
+                    ThreePointPercentage = updated.Proportions.C,
+                    FourPointPercentage = updated.Proportions.B,
+                    FivePointPercentage= updated.Proportions.A,
+                    ReportPercentage = updated.Proportions.Report,
+                    PresentationPercentage = updated.Proportions.Presentation
+                });
+                return NoContent();
             }
             catch (ClassNotFoundException)
             {
@@ -353,30 +366,6 @@ namespace Xmu.Crms.Insomnia
             {
                 return StatusCode(400, new { msg = "班级ID格式错误" });
             }
-        }
-
-        public class Attendance
-        {
-            public int NumPresent { get; set; }
-            public List<UserInfo> Present { get; set; }
-            public List<UserInfo> Late { get; set; }
-            public List<UserInfo> Absent { get; set; }
-        }
-
-
-        public struct Location
-        {
-            public double Longitude { get; set; }
-            public double Latitude { get; set; }
-            public double Elevation { get; set; }
-        }
-
-        public class GroupUser
-        {
-            public bool IsLeader { get; set; }
-            public long Id { get; set; }
-            public string Name { get; set; }
-            public string Number { get; set; }
         }
     }
 }

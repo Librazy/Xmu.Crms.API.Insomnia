@@ -20,12 +20,14 @@ namespace Xmu.Crms.Insomnia
         private readonly JwtHeader _header;
         private readonly ILoginService _loginService;
         private readonly IUserService _userService;
+        private readonly ISchoolService _schoolService;
 
-        public UserController(JwtHeader header, ILoginService loginService, IUserService userService)
+        public UserController(JwtHeader header, ILoginService loginService, IUserService userService, ISchoolService schoolService)
         {
             _header = header;
             _loginService = loginService;
             _userService = userService;
+            _schoolService = schoolService;
         }
 
         [HttpGet("/me")]
@@ -35,6 +37,7 @@ namespace Xmu.Crms.Insomnia
             try
             {
                 var user = _userService.GetUserByUserId(User.Id());
+                user.School = _schoolService.GetSchoolBySchoolId(user.SchoolId ?? -1);
                 return Json(user, Ignoring("City", "Province", "Password"));
             }
             catch (UserNotFoundException)

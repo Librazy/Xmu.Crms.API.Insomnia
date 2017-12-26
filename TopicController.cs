@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using System.Linq;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Exceptions;
@@ -26,7 +27,16 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                return Json(_topicService.GetTopicByTopicId(topicId));
+                var t = _topicService.GetTopicByTopicId(topicId);
+                return Json(new
+                {
+                    id = t.Id,
+                    serial = t.Serial,
+                    name = t.Name,
+                    description = t.Description,
+                    groupLimit = t.GroupNumberLimit,
+                    groupMemberLimit = t.GroupStudentLimit,
+                });
             }
             catch (TopicNotFoundException )
             {
@@ -78,7 +88,7 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                return Json(_seminarGroupService.ListGroupByTopicId(topicId));
+                return Json(_seminarGroupService.ListGroupByTopicId(topicId).Select(s => new{id = s.Id, name = s.Id + "组"}));
             }
             catch (TopicNotFoundException)
             {
