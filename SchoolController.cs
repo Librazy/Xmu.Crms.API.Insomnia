@@ -1,24 +1,23 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
+using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Models;
 using Xmu.Crms.Shared.Service;
-using System.Linq;
-using Xmu.Crms.Shared.Exceptions;
-using Type = Xmu.Crms.Shared.Models.Type;
 
 namespace Xmu.Crms.Insomnia
 {
     [Route("")]
     [Produces("application/json")]
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     public class SchoolController : Controller
     {
         private readonly ISchoolService _schoolService;
-        private readonly IUserService _userService;
+
+        public SchoolController(ISchoolService schoolService)
+        {
+            _schoolService = schoolService;
+        }
+
         [HttpGet("/school")]
         public IActionResult GetSchools([FromQuery] string city)
         {
@@ -28,7 +27,7 @@ namespace Xmu.Crms.Insomnia
                 id = t.Id,
                 name = t.Name,
                 province = t.Province,
-                city = t.City,
+                city = t.City
 
             }));
         }
@@ -55,13 +54,8 @@ namespace Xmu.Crms.Insomnia
         [HttpPost("/school")]
         public IActionResult CreateSchool([FromBody] School newSchool)
         {
-            var userlogin = _userService.GetUserByUserId(User.Id());
-            if (userlogin.Type == Shared.Models.Type.Teacher)
-            {
-                var schoolId = _schoolService.InsertSchool(new School);
-                return Created("/school/" + schoolId, newSchool);
-            }
-            return StatusCode(403, new { msg = "权限不足" });
+            var schoolId = _schoolService.InsertSchool(newSchool);
+            return Created("/school/" + schoolId, newSchool);
         }
     }
 }
