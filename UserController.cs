@@ -121,6 +121,12 @@ namespace Xmu.Crms.Insomnia
         public IActionResult UploadAvatar(IFormFile file) =>
             Created("/upload/avatar.png", new {url = "/upload/avatar.png"});
 
+        [Route("/")]
+        public IActionResult HomePage()
+        {
+            return Redirect("/Login");
+        }
+
         public class UsernameAndPassword
         {
             public string Phone { get; set; }

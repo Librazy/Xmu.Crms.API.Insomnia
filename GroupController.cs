@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Exceptions;
 using Xmu.Crms.Shared.Models;
-using System.Linq;
 using Xmu.Crms.Shared.Service;
+using Type = Xmu.Crms.Shared.Models.Type;
 
 namespace Xmu.Crms.Insomnia
 {
@@ -16,16 +17,16 @@ namespace Xmu.Crms.Insomnia
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class GroupController : Controller
     {
-        private readonly IUserService _userService;
         private readonly IFixGroupService _fixGroupService;
+        private readonly IGradeService _gradeService;
         private readonly ISeminarGroupService _seminarGroupService;
         private readonly ITopicService _topicService;
-        private readonly IGradeService _gradeService;
+        private readonly IUserService _userService;
 
         public GroupController(ICourseService courseService, IClassService classService,
             IUserService userService, IFixGroupService fixGroupService,
             ISeminarGroupService seminarGroupService, ITopicService topicService,
-            ISeminarService seminarService, 
+            ISeminarService seminarService,
             IGradeService gradeService, JwtHeader header)
         {
             _userService = userService;
@@ -35,21 +36,43 @@ namespace Xmu.Crms.Insomnia
             _gradeService = gradeService;
         }
 
-        /*
-         * Group表内没有相应的组名
-         */
         [HttpGet("/group/{groupId:long}")]
-        public IActionResult GetGroupById([FromRoute] long groupId)
+        public IActionResult GetGroupById([FromRoute] long groupId, [FromQuery] bool embedGrade = false)
         {
             try
             {
                 var group = _seminarGroupService.GetSeminarGroupByGroupId(groupId);
                 var members = _seminarGroupService.ListSeminarGroupMemberByGroupId(groupId);
                 var topics = _topicService.ListSeminarGroupTopicByGroupId(groupId);
+                if (!embedGrade)
+                {
+                    return Json(new
+                    {
+                        id = group.Id,
+                        name = group.Id + "组",
+                        leader = new
+                        {
+                            id = group.Leader.Id,
+                            name = group.Leader.Name
+                        },
+                        members = members.Select(m => new
+                        {
+                            id = m.Id,
+                            name = m.Name
+                        }),
+                        topics = topics.Select(t => new
+                        {
+                            id = t.Topic.Id,
+                            name = t.Topic.Name
+                        }),
+                        report = group.Report
+                    });
+                }
+
                 return Json(new
                 {
                     id = group.Id,
-                    name = "1A1",
+                    name = group.Id + "组",
                     leader = new
                     {
                         id = group.Leader.Id,
@@ -65,7 +88,17 @@ namespace Xmu.Crms.Insomnia
                         id = t.Topic.Id,
                         name = t.Topic.Name
                     }),
-                    report = group.Report
+                    report = group.Report,
+                    grade = new
+                    {
+                        presentationGrade = _topicService.ListSeminarGroupTopicByGroupId(groupId).Select(p => new
+                        {
+                            id = p.Id,
+                            grade = p.PresentationGrade
+                        }),
+                        reportGrade = group.ReportGrade,
+                        grade = group.FinalGrade
+                    }
                 });
             }
             catch (GroupNotFoundException)
@@ -86,7 +119,7 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                if (User.Type() != Shared.Models.Type.Teacher)
+                if (User.Type() != Type.Teacher)
                 {
                     return StatusCode(403, new {msg = "权限不足"});
                 }
@@ -109,13 +142,14 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                if (User.Type() != Shared.Models.Type.Student)
+                if (User.Type() != Type.Student)
                 {
                     return StatusCode(403, new {msg = "权限不足"});
                 }
 
-                _seminarGroupService.InsertTopicByGroupId(groupId, selected.Id); 
-                return Created($"/group/{groupId}/topic/{selected.Id}", new Dictionary<string, string> {["url"] = $" /group/{groupId}/topic/{selected.Id}"});
+                _seminarGroupService.InsertTopicByGroupId(groupId, selected.Id);
+                return Created($"/group/{groupId}/topic/{selected.Id}",
+                    new Dictionary<string, string> {["url"] = $" /group/{groupId}/topic/{selected.Id}"});
             }
             catch (GroupNotFoundException)
             {
@@ -132,7 +166,7 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                if (User.Type() != Shared.Models.Type.Student)
+                if (User.Type() != Type.Student)
                 {
                     return StatusCode(403, new {msg = "权限不足"});
                 }
@@ -142,14 +176,14 @@ namespace Xmu.Crms.Insomnia
             }
             catch (GroupNotFoundException)
             {
-                return StatusCode(404, new { msg = "没有找到该课程" });
+                return StatusCode(404, new {msg = "没有找到该课程"});
             }
             catch (ArgumentException)
             {
-                return StatusCode(400, new { msg = "组号格式错误" });
+                return StatusCode(400, new {msg = "组号格式错误"});
             }
         }
-        
+
         [HttpGet("/group/{groupId:long}/grade")]
         public IActionResult GetGradeByGroupId([FromRoute] long groupId)
         {
@@ -170,13 +204,12 @@ namespace Xmu.Crms.Insomnia
             }
             catch (GroupNotFoundException)
             {
-                return StatusCode(404, new { msg = "没有找到该课程" });
+                return StatusCode(404, new {msg = "没有找到该课程"});
             }
             catch (ArgumentException)
             {
-                return StatusCode(400, new { msg = "组号格式错误" });
+                return StatusCode(400, new {msg = "组号格式错误"});
             }
-            
         }
 
         [HttpPut("/group/{groupId:long}/grade/report")]
@@ -184,7 +217,7 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                if (User.Type() != Shared.Models.Type.Teacher)
+                if (User.Type() != Type.Teacher)
                 {
                     return StatusCode(403, new {msg = "权限不足"});
                 }
@@ -198,13 +231,12 @@ namespace Xmu.Crms.Insomnia
             }
             catch (GroupNotFoundException)
             {
-                return StatusCode(404, new { msg = "没有找到该课程" });
+                return StatusCode(404, new {msg = "没有找到该课程"});
             }
             catch (ArgumentException)
             {
-                return StatusCode(400, new { msg = "组号格式错误" });
+                return StatusCode(400, new {msg = "组号格式错误"});
             }
-            
         }
 
         [HttpPut("/group/{groupId:long}/grade/presentation/{studentId:long}")]
@@ -213,7 +245,7 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                if (User.Type() != Shared.Models.Type.Student)
+                if (User.Type() != Type.Student)
                 {
                     return StatusCode(403, new {msg = "权限不足"});
                 }
@@ -229,13 +261,12 @@ namespace Xmu.Crms.Insomnia
             }
             catch (GroupNotFoundException)
             {
-                return StatusCode(404, new { msg = "没有找到该课程" });
+                return StatusCode(404, new {msg = "没有找到该课程"});
             }
             catch (ArgumentException)
             {
-                return StatusCode(400, new { msg = "组号格式错误" });
+                return StatusCode(400, new {msg = "组号格式错误"});
             }
-            
         }
     }
 }

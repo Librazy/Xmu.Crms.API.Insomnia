@@ -16,16 +16,18 @@ namespace Xmu.Crms.Insomnia
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class ClassController : Controller
     {
+        private readonly CrmsContext _db;
         private readonly ICourseService _courseService;
         private readonly IClassService _classService;
         private readonly IUserService _userService;
         private readonly IFixGroupService _fixGroupService;
         private readonly ISeminarService _seminarService;
 
-        public ClassController(ICourseService courseService, IClassService classService, 
+        public ClassController(CrmsContext db, ICourseService courseService, IClassService classService, 
             IUserService userService, IFixGroupService fixGroupService,
             ISeminarService seminarService)
         {
+            _db = db;
             _courseService = courseService;
             _classService = classService;
             _userService = userService;
@@ -34,13 +36,35 @@ namespace Xmu.Crms.Insomnia
         }
 
         [HttpGet("/class")]
-        public IActionResult GetUserClasses()
+        public IActionResult GetUserClasses([FromQuery] string courseName, [FromQuery] string courseTeacher)
         {
             //List<ClassInfo> classes = new List<ClassInfo>();
             try
             {
-                var classes = _classService.ListClassByUserId(User.Id());
-                return Json(classes.Select(c => new {name = c.Name, site = c.Site}));
+                IList<ClassInfo> classes;
+                if (string.IsNullOrEmpty(courseName) && string.IsNullOrEmpty(courseTeacher))
+                {
+                    classes = _classService.ListClassByUserId(User.Id());
+                } else if (string.IsNullOrEmpty(courseTeacher))
+                {
+                    classes = _courseService.ListClassByCourseName(courseName);
+                }
+                else if (string.IsNullOrEmpty(courseName))
+                {
+                    classes = _courseService.ListClassByTeacherName(courseTeacher);
+                }else
+                {
+                    var c = _courseService.ListClassByCourseName(courseName).ToHashSet();
+                    c.IntersectWith(_courseService.ListClassByTeacherName(courseTeacher));
+                    classes = c.ToList();
+                }
+
+                return Json(classes.Select(c => new { id = c.Id, name = c.Name, site = c.Site, time = c.ClassTime,
+                    courseId = c.CourseId,
+                    courseName = _courseService.GetCourseByCourseId(c.CourseId).Name,
+                    courseTeacher = _userService.GetUserByUserId(_courseService.GetCourseByCourseId(c.CourseId).TeacherId).Name,
+                    numStudent = _db.Entry(c).Collection(cl => cl.CourseSelections).Query().Count()
+                }));
             }
             catch (ArgumentException)
             {
@@ -62,6 +86,7 @@ namespace Xmu.Crms.Insomnia
                     name = cls.Name, 
                     time = cls.ClassTime, 
                     site = cls.Site, 
+                    courseId = cls.CourseId,
                     calling = sems?.Id ?? -1, 
                     proportions = new
                     {
@@ -235,31 +260,31 @@ namespace Xmu.Crms.Insomnia
             try
             {
                 var userlogin = _userService.GetUserByUserId(User.Id());
-                if (userlogin.Type == Shared.Models.Type.Student)
+                if (userlogin.Type != Shared.Models.Type.Student)
                 {
-                    var group = _fixGroupService.GetFixedGroupById(User.Id(), classId);
-                    var leader = group.Leader;
-                    var _members = _fixGroupService.ListFixGroupMemberByGroupId(group.Id);
-                    //members.Add(group.Leader);
-                    var result = Json(
-                        new
-                        {
-                            leader = new
-                            {
-                                id = leader.Id,
-                                name = leader.Name,
-                                number = leader.Number
-                            },
-                            members = _members.Select(m => new
-                            {
-                                id = m.Id,
-                                name = m.Name,
-                                number = m.Number
-                            })
-                        });
-                    return result;
+                    return StatusCode(403, new {msg = "权限不足"});
                 }
-                return StatusCode(403, new {msg = "权限不足"});
+
+                var fixGroup = _fixGroupService.GetFixedGroupById(User.Id(), classId);
+                var leader = fixGroup.Leader ?? _userService.GetUserByUserId(fixGroup.LeaderId);
+                var members = _fixGroupService.ListFixGroupMemberByGroupId(fixGroup.Id);
+                var result = Json(
+                    new
+                    {
+                        leader = new
+                        {
+                            id = leader.Id,
+                            name = leader.Name,
+                            number = leader.Number
+                        },
+                        members = members.Select(m => new
+                        {
+                            id = m.Id,
+                            name = m.Name,
+                            number = m.Number
+                        })
+                    });
+                return result;
             }
             catch (ArgumentException)
             {

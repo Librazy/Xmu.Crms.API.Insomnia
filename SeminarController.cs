@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Xmu.Crms.Shared.Models;
 using Xmu.Crms.Shared.Service;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using Xmu.Crms.Shared.Exceptions;
 using Type = Xmu.Crms.Shared.Models.Type;
 
@@ -18,14 +19,16 @@ namespace Xmu.Crms.Insomnia
         private readonly ISeminarService _seminarService;
         private readonly ITopicService _topicService;
         private readonly IUserService _userService;
+        private readonly CrmsContext _db;
         private readonly ISeminarGroupService _seminargroupService;
 
-        public SeminarController(ISeminarService seminarService, ITopicService topicService, ISeminarGroupService seminargroupService, IUserService userService)
+        public SeminarController(ISeminarService seminarService, ITopicService topicService, ISeminarGroupService seminargroupService, IUserService userService, CrmsContext db)
         {
             _seminarService = seminarService;
             _topicService = topicService;
             _seminargroupService = seminargroupService;
             _userService = userService;
+            _db = db;
         }
 
         [HttpGet("/seminar/{seminarId:long}")]
@@ -33,7 +36,15 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                return Json(_seminarService.GetSeminarBySeminarId(seminarId));
+                var sem = _seminarService.GetSeminarBySeminarId(seminarId);
+                return Json(new
+                {
+                    id = sem.Id,
+                    name = sem.Name,
+                    description = sem.Description,
+                    startTime = sem.StartTime.ToString("yyyy-MM-dd"),
+                    endTime = sem.EndTime.ToString("yyyy-MM-dd")
+                });
             }
             catch (SeminarNotFoundException)
             {
@@ -116,7 +127,7 @@ namespace Xmu.Crms.Insomnia
             }
         }
 
-        [HttpPut("/seminar/{seminarId:long}/topic")]
+        [HttpPost("/seminar/{seminarId:long}/topic")]
         public IActionResult CreateTopicBySeminarId([FromRoute] long seminarId, [FromBody] Topic newTopic)
         {
             if (User.Type() != Type.Teacher)
@@ -138,11 +149,49 @@ namespace Xmu.Crms.Insomnia
                 return Json(groups.Select(t => new
                 {
                     id = t.Id,
-                    leader = t.Leader,
-                    presentationgrade = t.PresentationGrade,
-                    reportgrade = t.ReportGrade,
-                    finalgrade = t.FinalGrade,
+                    name = t.Id + "组"
                 }));
+            }
+            catch (SeminarNotFoundException)
+            {
+                return StatusCode(404, new { msg = "讨论课不存在" });
+            }
+            catch (ArgumentException)
+            {
+                return StatusCode(400, new { msg = "讨论课ID输入格式有误" });
+            }
+        }
+
+        [HttpGet("/seminar/{seminarId:long}/group/my")]
+        public IActionResult GetStudentGroupBySeminarId([FromRoute] long seminarId)
+        {
+            if (User.Type() != Type.Student)
+            {
+                return StatusCode(403, new { msg = "权限不足" });
+            }
+
+            try
+            {
+                var groups = _seminargroupService.ListSeminarGroupBySeminarId(seminarId);
+                var group = groups.SelectMany(grp => _db.Entry(grp).Collection(gp => gp.SeminarGroupMembers).Query().Include(gm => gm.SeminarGroup)
+                            .Where(gm => gm.StudentId == User.Id()).Select(gm => gm.SeminarGroup))
+                    .SingleOrDefault(sg => sg.SeminarId == seminarId) ?? throw new GroupNotFoundException();
+                var leader = group.Leader ?? _userService.GetUserByUserId(group.LeaderId);
+                var members = _seminargroupService.ListSeminarGroupMemberByGroupId(group.Id);
+                var topics = _topicService.ListSeminarGroupTopicByGroupId(group.Id)
+                    .Select(gt => _topicService.GetTopicByTopicId(gt.TopicId));
+                return Json(new
+                {
+                    id = group.Id,
+                    name = group.Id + "组",
+                    leader = new
+                    {
+                        id = leader.Id,
+                        name = leader.Name
+                    },
+                    members = members.Select(u => new {id = u.Id, name = u.Name}),
+                    topics = topics.Select(t => new {id = t.Id, name = t.Name})
+                });
             }
             catch (SeminarNotFoundException)
             {

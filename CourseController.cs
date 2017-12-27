@@ -272,21 +272,16 @@ namespace Xmu.Crms.Insomnia
         {
             try
             {
-                var seminars = _seminarService.ListSeminarByCourseId(courseId);
-                foreach (var seminar in seminars)
+                var seminarGroups = _seminarGroupService.ListSeminarGroupIdByStudentId(User.Id());
+                return Json(seminarGroups.Select(s => new
                 {
-                    var seminarGroups = _seminarGroupService.ListSeminarGroupBySeminarId(seminar.Id);
-                    return Json(seminarGroups.Select(s => new
-                    {
-                        seminarName = s.Seminar.Name,
-                        groupName = "3A2",//这里还是没有组名的问题
-                        leaderName = s.Leader.Name,
-                        presentationGrade = s.PresentationGrade,
-                        reportGrade = s.ReportGrade,
-                        grade = s.FinalGrade
-                    }));
-                }
-                return NoContent();
+                    seminarName = _seminarService.GetSeminarBySeminarId(s.SeminarId).Name,
+                    groupName = s.Id + "组",//这里还是没有组名的问题
+                    leaderName = _userService.GetUserByUserId(s.LeaderId).Name,
+                    presentationGrade = s.PresentationGrade,
+                    reportGrade = s.ReportGrade,
+                    grade = s.FinalGrade
+                }));
             }
             catch (CourseNotFoundException)
             {
